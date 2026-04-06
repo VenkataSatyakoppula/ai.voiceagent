@@ -1,0 +1,97 @@
+services:
+  avr-core:
+    image: agentvoiceresponse/avr-core
+    platform: linux/x86_64
+    container_name: avr-core
+    restart: always
+    environment:
+      - PORT=5001 
+      - HTTP_PORT=6001
+      - STS_URL=ws://avr-sts-gemini:6037  
+    ports:
+      - 5001:5001
+    networks:
+      - avr
+
+  avr-sts-gemini:
+    image: agentvoiceresponse/avr-sts-gemini
+    platform: linux/x86_64
+    container_name: avr-sts-gemini
+    restart: always
+    environment:
+      - PORT=6037
+      - GEMINI_API_KEY=$GEMINI_API_KEY
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash-native-audio-preview-12-2025}
+      # Leave GEMINI_INSTRUCTIONS empty to use GEMINI_FILE_INSTRUCTIONS (Selltis pack in ./knowledge).
+      - GEMINI_INSTRUCTIONS=${GEMINI_INSTRUCTIONS:-}
+      - GEMINI_FILE_INSTRUCTIONS=${GEMINI_FILE_INSTRUCTIONS:-/usr/src/app/knowledge/selltis-gemini-instructions.txt}
+      - GEMINI_THINKING_LEVEL=${GEMINI_THINKING_LEVEL:-MINIMAL}
+      - GEMINI_THINKING_BUDGET=${GEMINI_THINKING_BUDGET:-0}
+      - AMI_URL=${AMI_URL:-http://avr-ami:6006}
+      - SELLTIS_PUBLIC_BASE=${SELLTIS_PUBLIC_BASE:-https://app.dev.selltis.com}
+      - SELLTIS_LEADS_WEBHOOK_URL=${SELLTIS_LEADS_WEBHOOK_URL:-}
+      # Selltis / CRM REST (Bearer). Map paths + JSON bodies to your real API.
+      - SELLTIS_CRM_API_BASE=${SELLTIS_CRM_API_BASE:-}
+      - SELLTIS_CRM_API_KEY=${SELLTIS_CRM_API_KEY:-}
+      - SELLTIS_CRM_PATH_LEADS=${SELLTIS_CRM_PATH_LEADS:-}
+      - SELLTIS_CRM_PATH_OPPORTUNITIES=${SELLTIS_CRM_PATH_OPPORTUNITIES:-}
+      - SELLTIS_CRM_PATH_BOOKINGS=${SELLTIS_CRM_PATH_BOOKINGS:-}
+      - SELLTIS_CRM_QUERY_PARAM=${SELLTIS_CRM_QUERY_PARAM:-}
+      - SELLTIS_CRM_STAGE_PARAM=${SELLTIS_CRM_STAGE_PARAM:-}
+      - SELLTIS_CRM_OPPORTUNITY_STAGE_FIELD=${SELLTIS_CRM_OPPORTUNITY_STAGE_FIELD:-}
+      - SELLTIS_CRM_OPPORTUNITY_PATCH_METHOD=${SELLTIS_CRM_OPPORTUNITY_PATCH_METHOD:-}
+      # Google Sheet bookings (see google-apps-script/booking-append.gs)
+      - SELLTIS_GOOGLE_SHEET_APPS_SCRIPT_URL=${SELLTIS_GOOGLE_SHEET_APPS_SCRIPT_URL:-}
+      - SELLTIS_GOOGLE_SHEET_ID=${SELLTIS_GOOGLE_SHEET_ID:-}
+      - SELLTIS_GOOGLE_SHEET_RANGE=${SELLTIS_GOOGLE_SHEET_RANGE:-}
+      - SELLTIS_GOOGLE_SERVICE_ACCOUNT_JSON_B64=${SELLTIS_GOOGLE_SERVICE_ACCOUNT_JSON_B64:-}
+    volumes:
+      - ./tools:/usr/src/app/tools
+      - ./knowledge:/usr/src/app/knowledge:ro
+    networks:
+      - avr
+
+  avr-asterisk:
+    image: agentvoiceresponse/avr-asterisk
+    platform: linux/x86_64
+    container_name: avr-asterisk
+    restart: always
+    ports:
+      - 5038:5038
+      - 5060:5060
+      - 8088:8088
+      - 8089:8089
+      - 10000-10050:10000-10050/udp
+    volumes:
+      - ./asterisk/conf/manager.conf:/etc/asterisk/my_manager.conf
+      - ./asterisk/conf/pjsip.conf:/etc/asterisk/my_pjsip.conf
+      - ./asterisk/conf/extensions.conf:/etc/asterisk/my_extensions.conf
+      - ./asterisk/conf/queues.conf:/etc/asterisk/my_queues.conf
+      - ./asterisk/conf/ari.conf:/etc/asterisk/my_ari.conf
+    networks:
+      - avr
+
+  avr-ami:
+    image: agentvoiceresponse/avr-ami
+    platform: linux/x86_64
+    container_name: avr-ami
+    restart: always
+    environment:
+      - PORT=6006
+      - AMI_HOST=${AMI_HOST:-avr-asterisk}
+      - AMI_PORT=${AMI_PORT:-5038}
+      - AMI_USERNAME=${AMI_USERNAME:-avr}
+      - AMI_PASSWORD=${AMI_PASSWORD:-avr}
+    ports:
+      - 6006:6006
+    networks:
+      - avr
+
+networks:
+  avr:
+    name: avr
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          
